@@ -595,199 +595,58 @@ if(burger && navLinks){
   });
 })();
 
-// ---------- Firebase: вмикання/вимикання КОЖНОЇ ГРИ ОКРЕМО власником сайту ----------
-// Власник керує доступом дистанційно, без редагування HTML, через панель ⚙ у правому
-// нижньому куті сайту (пароль встановлюється нижче, змінна ADMIN_PASSWORD).
-// У Firebase Console -> Realtime Database дані зберігаються за шляхом:
-//   settings/games/game_0, settings/games/game_1, ... (true/false для кожної гри за порядком на сторінці)
-// Якщо значення для гри не задане — вважається, що гра увімкнена (true).
+// ---------- GitHub PAT: централізоване керування станом ігор ----------
 (function(){
-  var script1 = document.createElement('script');
-  script1.src = 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js';
-  var script2 = document.createElement('script');
-  script2.src = 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js';
-
-  script2.onload = initGamesToggle;
-  script1.onload = function(){ document.head.appendChild(script2); };
-  document.head.appendChild(script1);
-
-  function initGamesToggle(){
-    var firebaseConfig = {
-      apiKey: "AIzaSyCtZVI_z_m4IFwHzuqGnTLWiybNP__qRMw",
-      authDomain: "website-abitur.firebaseapp.com",
-      databaseURL: "https://website-abitur-default-rtdb.europe-west1.firebasedatabase.app",
-      projectId: "website-abitur",
-      storageBucket: "website-abitur.firebasestorage.app",
-      messagingSenderId: "743771202648",
-      appId: "1:743771202648:web:2b9f1fee528d726e1dd62d"
-    };
-    firebase.initializeApp(firebaseConfig);
-    var db = firebase.database();
-
-    var gameModal = document.getElementById('gameModal');
-    var gameCards = Array.prototype.slice.call(document.querySelectorAll('.game-card'));
-    if(gameCards.length === 0) return;
-
-    // Присвоюємо кожній картці стабільний id за порядком на сторінці: game_0, game_1, ...
-    gameCards.forEach(function(card, i){
-      card.dataset.gameId = 'game_' + i;
-    });
-
-    var currentStates = {}; // gameId -> true/false
-
-    function applyStateToCard(card, enabled){
-      var btn = card.querySelector('.btn-play');
-      if(enabled){
-        card.dataset.gameDisabled = '0';
-        card.style.opacity = '';
-        card.style.filter = '';
-        card.style.pointerEvents = '';
-        if(btn){
-          btn.disabled = false;
-          btn.style.opacity = '';
-          btn.style.cursor = '';
-          btn.style.background = '';
-          btn.style.color = '';
-        }
-      } else {
-        card.dataset.gameDisabled = '1';
-        card.style.opacity = '';
-        card.style.filter = '';
-        if(btn){
-          btn.disabled = true;
-          btn.style.background = '#9ca3af';
-          btn.style.color = '#e5e7eb';
-          btn.style.opacity = '1';
-          btn.style.cursor = 'not-allowed';
-        }
-        // якщо саме цю гру зараз відкрито в модалці — закриваємо
-        var titleEl = document.getElementById('gameModalTitle');
-        var cardTitle = card.getAttribute('data-game-title');
-        if(gameModal && gameModal.classList.contains('open') && titleEl && titleEl.textContent === cardTitle){
-          gameModal.classList.remove('open');
-          var frame = document.getElementById('gameModalFrame');
-          if(frame){ frame.removeAttribute('srcdoc'); frame.src = 'about:blank'; }
-        }
-      }
-    }
-
-    function renderAdminList(){
-      var list = document.getElementById('adminGamesList');
-      if(!list) return;
-      list.innerHTML = '';
-      gameCards.forEach(function(card){
-        var id = card.dataset.gameId;
-        var title = card.getAttribute('data-game-title') || id;
-        var enabled = currentStates[id] !== false;
-
-        var row = document.createElement('div');
-        row.setAttribute('style', 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.08);');
-
-        var label = document.createElement('span');
-        label.textContent = title;
-        label.setAttribute('style', 'font-size:12px;line-height:1.3;max-width:150px;');
-
-        var switchLabel = document.createElement('label');
-        switchLabel.setAttribute('style', 'position:relative;display:inline-block;width:38px;height:21px;flex-shrink:0;');
-
-        var input = document.createElement('input');
-        input.type = 'checkbox';
-        input.checked = enabled;
-        input.dataset.gameId = id;
-        input.className = 'admin-game-toggle';
-        input.setAttribute('style', 'opacity:0;width:0;height:0;');
-
-        var slider = document.createElement('span');
-        slider.setAttribute('style',
-          'position:absolute;cursor:pointer;inset:0;border-radius:21px;transition:.2s;' +
-          'background:' + (enabled ? '#7C3AED' : '#555') + ';'
-        );
-        var knob = document.createElement('span');
-        knob.setAttribute('style',
-          'position:absolute;height:15px;width:15px;top:3px;border-radius:50%;background:#fff;transition:.2s;' +
-          'left:' + (enabled ? '20px' : '3px') + ';'
-        );
-
-        switchLabel.appendChild(input);
-        switchLabel.appendChild(slider);
-        switchLabel.appendChild(knob);
-        row.appendChild(label);
-        row.appendChild(switchLabel);
-        list.appendChild(row);
-
-        input.addEventListener('change', function(){
-          db.ref('settings/games/' + id).set(input.checked);
-          slider.style.background = input.checked ? '#7C3AED' : '#555';
-          knob.style.left = input.checked ? '20px' : '3px';
-        });
-      });
-    }
-
-    // Слухаємо зміни в базі й одразу застосовуємо до карток та адмін-панелі.
-    db.ref('settings/games').on('value', function(snapshot){
-      var data = snapshot.exists() ? snapshot.val() : {};
-      gameCards.forEach(function(card){
-        var id = card.dataset.gameId;
-        var enabled = data && data[id] === false ? false : true;
-        currentStates[id] = enabled;
-        applyStateToCard(card, enabled);
-      });
-      renderAdminList();
-    }, function(error){
-      console.warn('Не вдалося отримати статус ігор з Firebase:', error);
-    });
-
-    // ---------- Видима адмін-кнопка для власника сайту ----------
-    // ЗМІНІТЬ ЦЕЙ ПАРОЛЬ на свій власний (просто відредагуйте текст нижче у файлі):
-    var ADMIN_PASSWORD = 'mtp2026';
-
-    var gearBtn = document.createElement('button');
-    gearBtn.id = 'adminGearBtn';
-    gearBtn.type = 'button';
-    gearBtn.title = 'Керування сайтом';
-    gearBtn.textContent = '⚙';
-    gearBtn.setAttribute('style',
-      'position:fixed;right:16px;bottom:16px;z-index:9999;width:40px;height:40px;' +
-      'border-radius:50%;border:none;background:rgba(124,58,237,0.35);color:#fff;' +
-      'font-size:18px;cursor:pointer;opacity:0.35;transition:opacity .2s;'
-    );
-    gearBtn.addEventListener('mouseenter', function(){ gearBtn.style.opacity = '1'; });
-    gearBtn.addEventListener('mouseleave', function(){ gearBtn.style.opacity = '0.35'; });
-
-    var panel = document.createElement('div');
-    panel.id = 'adminPanel';
-    panel.setAttribute('style',
-      'position:fixed;right:16px;bottom:64px;z-index:9999;display:none;' +
-      'background:#1e1b2e;color:#fff;padding:14px 16px;border-radius:12px;' +
-      'box-shadow:0 8px 24px rgba(0,0,0,.4);width:240px;max-height:70vh;overflow-y:auto;' +
-      'font-family:sans-serif;font-size:14px;'
-    );
-    panel.innerHTML =
-      '<div style="font-weight:600;margin-bottom:8px;">Ігри на сайті</div>' +
-      '<div id="adminGamesList"></div>' +
-      '<div style="margin-top:10px;font-size:11px;opacity:.7;">Зміна діє одразу для всіх відвідувачів</div>';
-
-    document.body.appendChild(gearBtn);
-    document.body.appendChild(panel);
-
-    var unlocked = sessionStorage.getItem('mtpAdminOk') === '1';
-
-    gearBtn.addEventListener('click', function(){
-      if(!unlocked){
-        var input = window.prompt('Введіть пароль адміністратора:');
-        if(input === null) return;
-        if(input !== ADMIN_PASSWORD){
-          alert('Невірний пароль');
-          return;
-        }
-        unlocked = true;
-        sessionStorage.setItem('mtpAdminOk', '1');
-      }
-      var isOpen = panel.style.display === 'block';
-      panel.style.display = isOpen ? 'none' : 'block';
-      if(!isOpen) renderAdminList();
-    });
+  'use strict';
+  const REPO='Nfy-78/Games_2026', PATH='games-status.json';
+  const API='https://api.github.com/repos/'+REPO+'/contents/'+PATH;
+  const cards=Array.from(document.querySelectorAll('.game-card[data-game-title]'));
+  let token='', states={}, revision='', ready=false, busy=false;
+  cards.forEach((c,i)=>{c.dataset.gameId='game_'+i; c.dataset.gameDisabled='1';});
+  const gear=document.createElement('button'); gear.id='adminGearBtn'; gear.textContent='⚙';
+  gear.title='Керування іграми'; gear.type='button';
+  gear.style.cssText='position:fixed;right:16px;bottom:16px;z-index:9999;width:44px;height:44px;border-radius:50%;border:1px solid #E0A83A;background:#3D2B12;color:white;font-size:23px;cursor:pointer';
+  const panel=document.createElement('div'); panel.id='githubGamesPanel';
+  panel.style.cssText='display:none;position:fixed;right:16px;bottom:68px;z-index:9999;width:min(390px,calc(100vw - 32px));max-height:76vh;overflow:auto;padding:20px;background:#3D2B12;color:#fff;border:2px solid #E0A83A;border-radius:14px;box-shadow:0 12px 36px #0006;font:14px Arial,sans-serif';
+  panel.innerHTML='<strong style="font-size:17px">Керування іграми</strong><p style="margin:9px 0;color:#F2CE7E;font-size:12px">Токен використовується лише в цій вкладці та не записується у файл або сховище браузера.</p><input id="ghPatInput" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_..." style="width:100%;padding:10px;border-radius:7px;border:1px solid #aaa"><button id="ghConnect" type="button" style="margin:9px 0;padding:9px 14px;cursor:pointer">Підключити токен</button><button id="ghForget" type="button" style="margin:9px 5px;padding:9px;cursor:pointer">Забути токен</button><div id="ghMessage" role="status" style="margin:9px 0;font-size:12px;color:#F2CE7E"></div><div id="ghRows"></div>';
+  document.body.append(gear,panel);
+  const input=panel.querySelector('#ghPatInput'), msg=panel.querySelector('#ghMessage'), rows=panel.querySelector('#ghRows');
+  function message(s){msg.textContent=s;}
+  function setState(c,enabled){
+    c.dataset.gameDisabled=enabled?'0':'1';
+    const btn=c.querySelector('.btn-play'); if(btn){btn.disabled=!enabled;btn.textContent=enabled?'Грати':'Тимчасово недоступна';btn.style.opacity=enabled?'1':'.65';btn.style.cursor=enabled?'pointer':'not-allowed';}
+    if(!enabled){const modal=document.getElementById('gameModal'),title=document.getElementById('gameModalTitle');if(modal?.classList.contains('open')&&title?.textContent===c.dataset.gameTitle){modal.classList.remove('open');const f=document.getElementById('gameModalFrame');f.removeAttribute('srcdoc');f.src='about:blank';}}
   }
+  function apply(){cards.forEach(c=>setState(c,ready&&states[c.dataset.gameId]===true));render();}
+  function render(){rows.replaceChildren();cards.forEach(c=>{const id=c.dataset.gameId,row=document.createElement('label');row.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid #ffffff33';const name=document.createElement('span');name.textContent=c.dataset.gameTitle;const check=document.createElement('input');check.type='checkbox';check.checked=ready&&states[id]===true;check.disabled=!token||busy;check.style.cssText='width:22px;height:22px;cursor:pointer';row.append(name,check);rows.append(row);check.addEventListener('change',()=>save(id,check.checked));});}
+  async function getStatus(){
+    try{
+      const r=await fetch(API+'?t='+Date.now(),{headers:{'Accept':'application/vnd.github+json'},cache:'no-store'});
+      if(!r.ok)throw Error('GitHub API: '+r.status);
+      const file=await r.json(); const data=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(file.content.replace(/\\n/g,'').replace(/\n/g,'')),x=>x.charCodeAt(0))));
+      states=data.games||{};revision=file.sha;ready=true;apply();return true;
+    }catch(e){ready=false;apply();message('Не вдалося перевірити статус ігор: '+e.message);return false;}
+  }
+  async function save(id,enabled){
+    if(!token)return;busy=true;render();message('Зберігаємо зміни в GitHub…');
+    try{
+      if(!await getStatus())throw Error('Не вдалося прочитати поточні налаштування');
+      const next={...states,[id]:enabled};
+      const payload={message:'Update game availability: '+id,content:btoa(unescape(encodeURIComponent(JSON.stringify({games:next},null,2)+'\n'))),sha:revision};
+      const r=await fetch(API,{method:'PUT',headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github+json','Content-Type':'application/json','X-GitHub-Api-Version':'2022-11-28'},body:JSON.stringify(payload)});
+      if(!r.ok)throw Error('GitHub '+r.status+' — перевірте права Contents: Read and write');
+      states=next;ready=true;apply();message('Збережено. GitHub Pages може оновлюватися із затримкою; стан із API перевіряється регулярно.');
+    }catch(e){message('Помилка: '+e.message);await getStatus();}
+    finally{busy=false;render();}
+  }
+  panel.querySelector('#ghConnect').onclick=async()=>{
+    const value=input.value.trim();if(!value){message('Введіть токен.');return;}
+    message('Перевіряємо токен…');
+    try{const r=await fetch('https://api.github.com/repos/'+REPO,{headers:{Authorization:'Bearer '+value,Accept:'application/vnd.github+json'}});if(!r.ok)throw Error('HTTP '+r.status);token=value;input.value='';message('Токен підключено для поточної вкладки.');render();await getStatus();}catch(e){message('Не вдалося підключити: '+e.message);}
+  };
+  panel.querySelector('#ghForget').onclick=()=>{token='';input.value='';message('Токен забуто.');render();};
+  gear.onclick=()=>{panel.style.display=panel.style.display==='none'?'block':'none';};
+  apply();getStatus();setInterval(getStatus,15000);
 })();
 
 </script>
