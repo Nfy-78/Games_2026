@@ -1,7 +1,7 @@
 {
   "games": {
     "game_0": false,
-    "game_1": true,
+    "game_1": false,
     "game_2": false,
     "game_3": true,
     "game_4": false,
